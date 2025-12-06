@@ -1,0 +1,53 @@
+# Implementation Plan - X-Mark Sync
+
+This plan follows the iterative development process. Each step must be completed and marked as "Done" before moving to the next.
+
+- [x] Step 1: Project Initialization
+    - Set up Python virtual environment.
+    - Create requirements.txt (playwright, pyyaml, etc.).
+    - Create basic project directory structure (`src/`, `config/`, `data/`).
+    - Create a comprehensive `README.md` explaining how to set up the environment.
+    - **Done**: Created project structure, requirements.txt, README.md, and .gitignore.Initialized venv (user to activate).
+
+- [x] Step 2: Browser & Authentication Module
+    - Implement `src/auth.py`.
+    - Function to launch Playwright browser with persistent context (`user_data_dir`).
+    - Script to verify login status and verify access to `https://x.com/home`.
+    - **Done**: Created `src/auth.py` with `BrowserManager` class handling persistent context and login verification.
+
+- [x] Step 3: Bookmark Scraper Prototype
+    - Implement `src/scraper.py`.
+    - Define logic to navigate to `https://x.com/i/bookmarks`.
+    - Implement scrolling logic to load multiple items.
+    - Extract raw HTML of tweet elements.
+    - **Done**: Created `src/scraper.py` with `BookmarkScraper` class. Implemented navigation and basic scrolling/counting logic. Identified virtualization challenge (DOM elements removed on scroll).
+
+- [x] Step 4: Data Parsing Module
+    - Implement `src/parser.py`.
+    - Extract specific fields (Text, Author, Date, Media URLs, Tweet ID) from the raw elements.
+    - Handle edge cases (Quote tweets, Retweets, Threads).
+    - **Done**: Created `src/parser.py` with `TweetParser` and `TweetData` dataclass. Implemented extraction logic for Text, Author, Date, ID, and Images/Video Posters.
+
+- [x] Step 5: Markdown Generator & File Storage
+    - Implement `src/storage.py`.
+    - Create logic to format parsed data into Markdown strings with Frontmatter.
+    - Implement file writing logic compatible with Obsidian folder structures (Category/Date).
+    - **Done**: Created `src/storage.py` with `StorageManager`. Implemented YAML frontmatter generation and date-based folder structure (`YYYY/MM/`).
+
+- [x] Step 6: Configuration & incremental Sync Logic
+    - Implement `src/config.py` to load settings (Obsidian path, Categories mapping).
+    - Add logic to stop scrolling when a previously seen Tweet ID is encountered.
+    - **Done**: Created `src/config.py` with `ConfigManager`. Implemented persistence for `last_synced_id` to enable incremental updates. Created default `config.yaml`.
+
+- [x] Step 7: Main Entry Point & Testing
+    - Create `main.py` to orchestrate the workflow.
+    - Perform end-to-end testing.
+    - Verify output in Obsidian.
+    - **Done**: Created `src/main.py` orchestrating the full flow: Auth -> Scrape -> Parse -> Save -> Config Update. Implemented incremental sync logic.
+
+- [x] Step 8: Web Interface & Continuous Monitoring
+    - Install `fastapi`, `uvicorn`, `jinja2`.
+    - Refactor `src/main.py` into a thread-safe `SyncService` that can be started/stopped.
+    - Implement "Continuous Monitoring" mode (loop with sleep instead of exit).
+    - Create `src/web.py` and `src/templates/index.html`.
+    - **Done**: Created Web UI with Start/Stop/Import controls. Refactored `SyncService` to support background threads and continuous monitoring loop.
