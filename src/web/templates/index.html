@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>X-Mark Sync</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        twitter: '#1da1f2',
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-gray-100 min-h-screen font-sans">
+    <div class="container mx-auto px-4 py-8 max-w-4xl">
+        <!-- Header -->
+        <header class="flex justify-between items-center mb-8">
+            <h1 class="text-3xl font-bold text-gray-800 flex items-center gap-2">
+                <span class="text-twitter">𝕏</span>-Mark Sync
+            </h1>
+            <div id="status-badge" class="px-3 py-1 rounded-full text-sm font-medium bg-gray-200 text-gray-600">
+                Ready
+            </div>
+        </header>
+
+        <!-- Main Control -->
+        <div class="bg-white rounded-xl shadow-md p-6 mb-6">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-xl font-semibold text-gray-700">控制面板</h2>
+                <button onclick="startSync()" id="sync-btn" class="bg-twitter hover:bg-blue-500 text-white font-bold py-2 px-6 rounded-lg transition-colors flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                    开始同步
+                </button>
+            </div>
+            
+            <!-- Logs Console -->
+            <div class="bg-gray-900 rounded-lg p-4 h-64 overflow-y-auto font-mono text-sm text-green-400 shadow-inner" id="console">
+                <p class="text-gray-500">> 等待指令...</p>
+            </div>
+        </div>
+
+        <!-- Recent Bookmarks -->
+        <div class="bg-white rounded-xl shadow-md p-6">
+            <h2 class="text-xl font-semibold text-gray-700 mb-4">最近同步 (Latest 20)</h2>
+            <div class="space-y-2">
+                {% for bookmark in bookmarks %}
+                <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition">
+                    <div class="flex items-center gap-3">
+                        <div class="w-8 h-8 bg-twitter/10 text-twitter rounded-full flex items-center justify-center text-xs font-bold">
+                            MD
+                        </div>
+                        <span class="text-gray-700 font-medium truncate max-w-md">{{ bookmark.title }}</span>
+                    </div>
+                    <span class="text-xs text-gray-400 font-mono">Saved</span>
+                </div>
+                {% else %}
+                <p class="text-gray-400 text-center py-4">暂无最近同步记录</p>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const consoleDiv = document.getElementById('console');
+        const syncBtn = document.getElementById('sync-btn');
+        const statusBadge = document.getElementById('status-badge');
+        let pollInterval = null;
+
+        function appendLog(msg) {
+            const p = document.createElement('p');
+            p.textContent = `> ${msg}`;
+            consoleDiv.appendChild(p);
+            consoleDiv.scrollTop = consoleDiv.scrollHeight;
+        }
+
+        async function startSync() {
+            syncBtn.disabled = true;
+            syncBtn.classList.add('opacity-50', 'cursor-not-allowed');
+            statusBadge.className = "px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-600";
+            statusBadge.textContent = "Running...";
+            
+            try {
+                const res = await fetch('/api/sync', { method: 'POST' });
+                const data = await res.json();
+                consoleDiv.innerHTML = ''; // Clear logs
+                appendLog(data.message);
+                
+                // Start polling logs
+                if (pollInterval) clearInterval(pollInterval);
+                pollInterval = setInterval(pollLogs, 1000);
+                
+            } catch (e) {
+                appendLog("Error starting sync: " + e);
+                resetUI();
+            }
+        }
+
+        async function pollLogs() {
+            try {
+                const res = await fetch('/api/logs');
+                const data = await res.json();
+                
+                // Simple diff would be better, but for now just clear and rewrite or append new
+                // To prevent flickering, we just check length. 
+                // Actually, let's just rewrite for simplicity in this MVP
+                consoleDiv.innerHTML = '';
+                data.logs.forEach(log => appendLog(log));
+
+                if (!data.is_running) {
+                    clearInterval(pollInterval);
+                    resetUI();
+                    appendLog("--- 任务结束 ---");
+                    // Reload page to show new bookmarks?
+                    setTimeout(() => location.reload(), 2000); 
+                }
+            } catch (e) {
+                console.error(e);
+            }
+        }
+
+        function resetUI() {
+            syncBtn.disabled = false;
+            syncBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+            statusBadge.className = "px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-600";
+            statusBadge.textContent = "Completed / Ready";
+        }
+    </script>
+</body>
+</html>
+

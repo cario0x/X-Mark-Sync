@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>X-Mark Sync Dashboard</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+            color: #333;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        h1 { text-align: center; color: #1da1f2; margin-bottom: 30px; }
+        
+        .config-section {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            border: 1px solid #e1e8ed;
+        }
+        .config-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .path-display {
+            flex-grow: 1;
+            padding: 8px;
+            background: white;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-family: monospace;
+            color: #555;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .controls {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            margin-bottom: 30px;
+        }
+        button {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: opacity 0.2s;
+        }
+        button:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-monitor { background-color: #1da1f2; color: white; }
+        .btn-import { background-color: #17bf63; color: white; }
+        .btn-stop { background-color: #e0245e; color: white; }
+        .btn-config { background-color: #657786; color: white; padding: 8px 16px; font-size: 14px; }
+        
+        .status-bar {
+            background: #eee;
+            padding: 10px;
+            border-radius: 6px;
+            margin-bottom: 15px;
+            font-weight: bold;
+            display: flex;
+            justify-content: space-between;
+        }
+        .status-indicator.active { color: #17bf63; }
+        .status-indicator.inactive { color: #666; }
+        
+        .log-window {
+            background: #1e1e1e;
+            color: #d4d4d4;
+            padding: 15px;
+            border-radius: 8px;
+            height: 400px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 14px;
+            white-space: pre-wrap;
+        }
+        .log-entry { margin-bottom: 4px; border-bottom: 1px solid #333; padding-bottom: 2px; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>X-Mark Sync Dashboard</h1>
+
+    <div class="status-bar">
+        <span>Status: <span id="status-text">Idle</span></span>
+        <span id="mode-text" style="display:none">Mode: Monitoring</span>
+    </div>
+
+    <div class="config-section">
+        <div class="config-row">
+            <span>Save Location:</span>
+            <div id="path-display" class="path-display">Loading...</div>
+            <button class="btn-config" onclick="selectFolder()">📂 Change Folder</button>
+        </div>
+    </div>
+
+    <div class="controls">
+        <button id="btn-monitor" class="btn-monitor" onclick="startMonitor()">
+            ▶ Start Sync (Continuous)
+        </button>
+        <button id="btn-import" class="btn-import" onclick="importNow()">
+            ⬇ One-Click Import (Obsidian)
+        </button>
+        <button id="btn-stop" class="btn-stop" onclick="stopSync()" disabled>
+            ⏹ Stop
+        </button>
+    </div>
+
+    <h3>Logs</h3>
+    <div class="log-window" id="log-window">
+        <!-- Logs will appear here -->
+        <div style="color: #666; text-align: center; margin-top: 20px;">Waiting for logs...</div>
+    </div>
+</div>
+
+<script>
+    const btnMonitor = document.getElementById('btn-monitor');
+    const btnImport = document.getElementById('btn-import');
+    const btnStop = document.getElementById('btn-stop');
+    const statusText = document.getElementById('status-text');
+    const modeText = document.getElementById('mode-text');
+    const logWindow = document.getElementById('log-window');
+    const pathDisplay = document.getElementById('path-display');
+
+    let lastLogCount = 0;
+
+    async function defCall(url) {
+        try {
+            const res = await fetch(url, { method: 'POST' });
+            return await res.json();
+        } catch (e) {
+            console.error(e);
+        }
+    }
+
+    async function selectFolder() {
+        try {
+            const res = await fetch('/api/select_folder');
+            const data = await res.json();
+            if (data.status === 'success') {
+                pathDisplay.innerText = data.path;
+            }
+        } catch (e) {
+            console.error("Error selecting folder", e);
+            alert("Failed to open folder selector.");
+        }
+    }
+
+    async function startMonitor() {
+        await defCall('/api/start_monitor');
+        updateStatus();
+    }
+
+    async function importNow() {
+        await defCall('/api/import_now');
+        updateStatus();
+    }
+
+    async function stopSync() {
+        await defCall('/api/stop');
+        updateStatus();
+    }
+
+    async function loadConfig() {
+        try {
+            const res = await fetch('/api/get_config');
+            const data = await res.json();
+            pathDisplay.innerText = data.obsidian_vault_path;
+        } catch (e) {
+            pathDisplay.innerText = "Error loading path";
+        }
+    }
+
+    async function updateStatus() {
+        try {
+            const res = await fetch('/api/status');
+            const data = await res.json();
+
+            // Update Buttons
+            if (data.is_running) {
+                btnMonitor.disabled = true;
+                btnImport.disabled = true;
+                btnStop.disabled = false;
+                statusText.innerText = "Running";
+                statusText.className = "status-indicator active";
+                
+                if (data.is_monitoring) {
+                    modeText.innerText = "Mode: Continuous Monitoring";
+                    modeText.style.display = "inline";
+                } else {
+                    modeText.innerText = "Mode: One-Time Import";
+                    modeText.style.display = "inline";
+                }
+            } else {
+                btnMonitor.disabled = false;
+                btnImport.disabled = false;
+                btnStop.disabled = true;
+                statusText.innerText = "Idle";
+                statusText.className = "status-indicator inactive";
+                modeText.style.display = "none";
+            }
+
+            // Update Logs
+            if (data.logs && data.logs.length > 0) {
+                const shouldScroll = logWindow.scrollTop + logWindow.clientHeight >= logWindow.scrollHeight - 20;
+                
+                // Simple clear and rebuild for now, optimized slightly by string builder
+                // In prod, we would append only new ones, but list size is small (500 max)
+                logWindow.innerHTML = data.logs.map(log => `<div class="log-entry">${log}</div>`).join('');
+
+                if (shouldScroll) {
+                    logWindow.scrollTop = logWindow.scrollHeight;
+                }
+            }
+        } catch (e) {
+            console.error("Poll failed", e);
+            statusText.innerText = "Connection Lost";
+        }
+    }
+
+    // Load initial config
+    loadConfig();
+
+    // Poll every 1 second
+    setInterval(updateStatus, 1000);
+    updateStatus(); // Initial call
+
+</script>
+
+</body>
+</html>
